@@ -19,7 +19,7 @@ The script:
 2. Creates `~/.local/bin/` if it does not exist.
 3. Downloads the latest `toolbox-export_Linux_x86_64.tar.gz` from GitHub Releases into a temporary directory.
 4. Extracts the binary and marks it executable.
-5. Prints `Installed to: /home/<you>/.local/bin/toolbox-export`.
+5. Prints `Installation complete.` followed by `Installed to: /home/<you>/.local/bin/toolbox-export`.
 
 The final binary lands at **`~/.local/bin/toolbox-export`**.
 
@@ -31,8 +31,12 @@ The final binary lands at **`~/.local/bin/toolbox-export`**.
 
 <CodeGroup>
 
-```bash mise
+```bash mise (GitHub Releases)
 mise github:Pratyay360/toolbox-export@latest
+```
+
+```bash mise (Go source)
+mise install go:github.com/Pratyay360/toolbox-export@latest
 ```
 
 ```bash go install
@@ -49,7 +53,8 @@ curl -sf http://goblin.run/github.com/Pratyay360/toolbox-export | PREFIX=~/.loca
 
 </CodeGroup>
 
-- **mise** — installs directly from GitHub Releases into mise's shim directory; no Go toolchain required.
+- **mise (GitHub Releases)** — installs directly from GitHub Releases into mise's shim directory; no Go toolchain required.
+- **mise (Go source)** — compiles from source via mise's Go plugin; requires a Go toolchain managed by mise.
 - **go install** — compiles from source; requires Go 1.21 or later on the host.
 - **stew** — a binary manager that pins exact versions; run `stew s Pratyay360/toolbox-export` and stew will resolve the latest release.
 - **goblin** — a zero-dependency Go binary installer; uses `PREFIX` to control the destination.

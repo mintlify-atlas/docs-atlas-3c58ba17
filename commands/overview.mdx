@@ -1,7 +1,7 @@
 ---
-title: "toolbox-export Command Reference Overview"
+title: "toolbox-export Command and Flag Reference Overview"
 sidebarTitle: "Overview"
-description: "Complete command reference for toolbox-export. Covers the root export command, init, export, binary subcommands, and the --rm removal flag with all options."
+description: "Complete command reference for toolbox-export: root command, init, export, binary subcommands, and the --rm removal flag with all options."
 ---
 
 toolbox-export is a Go CLI tool built on [Cobra](https://github.com/spf13/cobra) that bridges Fedora Toolbox containers and the host desktop environment. Running `toolbox-export <app>` without any subcommand performs a full export — it copies the application's `.desktop` launcher (with icons) to the host and creates a binary wrapper script so the tool is reachable from any terminal. Three focused subcommands (`init`, `export`, `binary`) let you perform each piece of that workflow independently, and the `--rm` flag triggers interactive removal of everything previously exported for a given app.

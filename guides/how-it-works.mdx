@@ -1,5 +1,5 @@
 ---
-title: "How toolbox-export Works: Container Detection and Export Pipeline"
+title: "How toolbox-export Works: Detection and Export Pipeline"
 sidebarTitle: "How It Works"
 description: "Learn how toolbox-export detects Toolbox containers, patches .desktop files, generates binary wrappers, and copies icons to integrate apps with the host."
 ---
@@ -32,9 +32,10 @@ image="registry.fedoraproject.org/fedora-toolbox:40"
 <Steps>
   <Step title="Container check">
     toolbox-export calls `checkContainer()`, which stats `/run/.containerenv`.
-    If the file is absent, an error is returned: `"not running inside a toolbox
-    container"`. This is the very first guard — no further work is done on the
-    host.
+    If the file is absent, an error is returned immediately. The exact message
+    depends on which function is invoked: `ExportLauncher` returns `"not running
+    from toolbox"`, while `ExportBinary` returns `"not running inside a toolbox
+    container"`. No further work is done until this check passes.
   </Step>
   <Step title="Read container name">
     `GetContainerName()` opens `/run/.containerenv` and scans its lines for one
@@ -115,9 +116,9 @@ fi
 
 | Condition | Meaning | Command used |
 |---|---|---|
-| `/run/.containerenv` exists | Running inside a Flatpak sandbox | `flatpak-spawn --host toolbox run` |
+| `/run/.containerenv` exists | Running inside another container (e.g. a Flatpak sandbox) | `flatpak-spawn --host toolbox run` |
 | `$container` is empty | Running on the bare host | `/usr/bin/toolbox run -c <container>` |
-| Neither of the above | Running inside a different container | `podman exec -d <container>` |
+| Neither of the above | Running inside a different container without `/run/.containerenv` | `podman exec -d <container>` |
 
 The `"$@"` at the end of every branch passes all arguments and standard I/O through to the container-side process transparently.
 

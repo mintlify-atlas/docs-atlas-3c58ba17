@@ -1,23 +1,25 @@
 ---
 title: "Troubleshooting toolbox-export: Common Errors and Fixes"
 sidebarTitle: "Troubleshooting"
-description: "Fix common toolbox-export errors including container detection failures, missing desktop files, binary not found, and PATH issues with step-by-step solutions."
+description: "Fix common toolbox-export errors: container detection failures, missing desktop files, binary not found, and PATH misconfiguration. Step-by-step fixes."
 ---
 
 Most toolbox-export failures fall into a few categories: running the tool in the wrong environment, missing application `.desktop` files, or PATH not being configured. This guide covers the most common errors and how to resolve them. If you need more detail about what toolbox-export is doing at any step, refer to the [How It Works](/guides/how-it-works) guide, and increase log verbosity using the `--log-level` flag described at the bottom of this page.
 
 <Accordion title='Error: "not running inside a toolbox container"'>
-  **Cause:** toolbox-export was invoked on the host shell instead of from inside
-  a Toolbox container. The tool checks for `/run/.containerenv` to confirm it
-  is running inside a container — this file only exists inside Toolbox (and
-  compatible OCI containers). Running it on the host means that file is absent
-  and the check fails immediately.
+  **Cause:** This error is returned by `ExportBinary` (the `binary` subcommand
+  and the binary-export half of the root command). It means toolbox-export was
+  invoked on the host shell instead of from inside a Toolbox container. The
+  tool checks for `/run/.containerenv` to confirm it is running inside a
+  container — this file only exists inside Toolbox (and compatible OCI
+  containers). Running it on the host means that file is absent and the check
+  fails immediately.
 
   **Fix:** Enter the container first, then run toolbox-export from within it:
 
   ```bash
   toolbox enter fedora-toolbox-40
-  toolbox-export firefox
+  toolbox-export binary firefox
   ```
 
   <Note>
@@ -26,6 +28,51 @@ Most toolbox-export failures fall into a few categories: running the tool in the
     on the host. `--rm` removes previously exported artifacts from the host
     filesystem and also runs on the host.
   </Note>
+</Accordion>
+
+<Accordion title='Error: "not running from toolbox"'>
+  **Cause:** This error is returned by `ExportLauncher` (the `export` subcommand
+  and the launcher-export half of the root command). Like the binary export
+  check, it verifies the presence of `/run/.containerenv`. If the file is
+  absent — because the command was run on the host instead of inside the
+  container — `ExportLauncher` returns this error before scanning for any
+  `.desktop` files.
+
+  **Fix:** Enter the container before running toolbox-export:
+
+  ```bash
+  toolbox enter fedora-toolbox-40
+  toolbox-export export firefox
+  ```
+
+  Or, to export both the launcher and the binary wrapper in one step:
+
+  ```bash
+  toolbox enter fedora-toolbox-40
+  toolbox-export firefox
+  ```
+
+  <Note>
+    Note the distinction: `ExportBinary` says `"not running inside a toolbox
+    container"`, while `ExportLauncher` says `"not running from toolbox"`. Both
+    failures have the same root cause and the same fix — run from inside the
+    container.
+  </Note>
+</Accordion>
+
+<Accordion title='Error: "no application name provided" or "no application name"'>
+  **Cause:** You ran a toolbox-export command without supplying an application
+  name. `ExportBinary` returns `"no application name provided; usage:
+  toolbox-export binary <application>"` and `ExportLauncher` returns `"no
+  application name"` when the `app` argument is an empty string.
+
+  **Fix:** Always pass the application name as the first positional argument:
+
+  ```bash
+  toolbox-export firefox          # export both launcher and binary
+  toolbox-export export firefox   # export launcher only
+  toolbox-export binary htop      # export binary wrapper only
+  ```
 </Accordion>
 
 <Accordion title='Error: "could not find container name in /run/.containerenv"'>

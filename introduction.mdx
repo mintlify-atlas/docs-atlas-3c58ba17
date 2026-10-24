@@ -17,13 +17,13 @@ toolbox-export fills that gap. It reads `/run/.containerenv` to detect that it i
 ## What Gets Exported
 
 <CardGroup cols={3}>
-  <Card title="Desktop Launcher" icon="desktop">
+  <Card title="Desktop Launcher" icon="desktop" href="/guides/gui-applications">
     A patched `.desktop` file is written to `~/.local/share/applications/`. The `Exec=` line is rewritten to invoke `toolbox run -c <container>`, and the app name is suffixed with `(toolbox)` so you can tell it apart from any host version.
   </Card>
-  <Card title="Binary Wrapper" icon="terminal">
+  <Card title="Binary Wrapper" icon="terminal" href="/guides/cli-applications">
     A lightweight shell script is placed in `~/.local/toolbox/<app>`. It detects whether it is called from the host, from inside another container, or from a Flatpak sandbox, and dispatches to the correct invocation (`toolbox run`, `podman exec`, or `flatpak-spawn --host`) accordingly.
   </Card>
-  <Card title="Application Icons" icon="image">
+  <Card title="Application Icons" icon="image" href="/guides/how-it-works">
     PNG and SVG icons referenced by the `.desktop` file are extracted from `/usr/share/icons` and `/usr/share/pixmaps` inside the container and copied to `~/.local/share/icons/` on the host, so the application menu entry renders correctly.
   </Card>
 </CardGroup>

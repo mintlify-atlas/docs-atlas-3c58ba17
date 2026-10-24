@@ -1,7 +1,7 @@
 ---
 title: "Export CLI Tools from a Toolbox Container to the Host"
 sidebarTitle: "CLI Applications"
-description: "Use toolbox-export binary to expose command-line tools installed in a Toolbox container as callable commands on the host terminal with full argument passthrough."
+description: "Use toolbox-export binary to expose CLI tools from a Toolbox container as callable host commands with full argument passthrough and no manual toolbox run."
 ---
 
 Command-line tools installed inside a Toolbox container can be made available in the host terminal using `toolbox-export binary`. The exported wrapper transparently passes all arguments and stdin/stdout to the container-side binary, so the tool behaves exactly as it would if called from inside the container — no manual `toolbox run` invocations required.
@@ -85,6 +85,16 @@ Each branch handles a different calling context:
 | Neither condition matches | Called from inside a different container | Uses `podman exec -d <container>` to exec into the target container |
 
 The `"$@"` at the end of every branch ensures all positional arguments are forwarded verbatim. Standard input and output are inherited from the calling shell.
+
+## How the Binary Is Located
+
+Before writing the wrapper, `ExportBinary` calls `findContainerBinary`, which searches every directory in the container's `$PATH` for the named executable. Crucially, `~/.local/toolbox` is always excluded from this search. This prevents toolbox-export from wrapping a previously exported wrapper — a scenario that would create a self-referential script that loops back into itself instead of reaching the real container binary.
+
+<Note>
+  If the binary only exists inside `~/.local/toolbox` (i.e. it is itself an
+  exported wrapper), toolbox-export will return a "command not found" error
+  rather than silently creating a broken double-wrapper.
+</Note>
 
 ## PATH Note
 
