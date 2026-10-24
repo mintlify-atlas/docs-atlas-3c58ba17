@@ -1,0 +1,72 @@
+---
+title: "toolbox-export export — Export Desktop Launcher and Icons"
+sidebarTitle: "export"
+description: "The export subcommand copies a container app's .desktop file and icons to ~/.local/share/applications and ~/.local/share/icons on the host."
+---
+
+The `export` subcommand (and the default root command behavior) exports a container application's `.desktop` launcher and associated icons to the host desktop environment. It locates the application's desktop entry file inside the container, patches key fields so the launcher invokes the app via `toolbox run`, and copies any referenced icons to the host's local icon directory — making the application appear in app launchers, search, and taskbars exactly like a natively installed program.
+
+## Usage
+
+```bash
+toolbox-export export <application>
+# or equivalently (root command exports both launcher and binary):
+toolbox-export <application>
+```
+
+## Arguments
+
+<ParamField path="application" type="string" required>
+  The name of the application binary as it appears in the `Exec=` line of its `.desktop` file. This is typically the lowercase binary name, for example `firefox`, `code`, or `gimp`. toolbox-export scans every `.desktop` file it finds and selects those whose `Exec=` line resolves to a binary with this exact base name.
+</ParamField>
+
+## What It Does
+
+<Steps>
+  <Step title="Verify container context">
+    Checks for the presence of `/run/.containerenv`. If the file does not exist, the command aborts with an error — exporting requires reading files from inside the container filesystem.
+  </Step>
+  <Step title="Discover matching .desktop files">
+    Scans both `/usr/share/applications/*.desktop` and `/usr/local/share/applications/*.desktop` for entries where the `Exec=` line resolves to the requested application binary. Any file that contains a `NotShowIn` key is skipped automatically before matching begins.
+  </Step>
+  <Step title="Rewrite Exec= line">
+    Prepends `toolbox run -c <container>` to the existing `Exec=` value so that activating the launcher from the host correctly runs the binary inside the named container.
+  </Step>
+  <Step title="Rewrite Name= field">
+    Appends ` (toolbox)` to every `Name=` entry so the application is clearly identified as container-hosted in app menus and search results.
+  </Step>
+  <Step title="Rewrite TryExec= field">
+    Replaces the full path in `TryExec=` with just the basename of the binary. This prevents the host desktop from hiding the launcher because the full container path does not exist on the host.
+  </Step>
+  <Step title="Write patched .desktop to host">
+    Writes the modified desktop entry to `~/.local/share/applications/`, creating the directory (mode `0755`) if it does not exist. The filename is preserved from the source.
+  </Step>
+  <Step title="Copy icons to host">
+    Reads the `Icon=` value from each matched desktop file, then walks `/usr/share/icons` and `/usr/share/pixmaps` inside the container for files whose name matches that icon name. All matching `.png` and `.svg` files are copied to `~/.local/share/icons/` on the host.
+  </Step>
+</Steps>
+
+## Output Files
+
+| File | Description |
+|---|---|
+| `~/.local/share/applications/<app>.desktop` | Patched desktop entry, ready for host app launchers |
+| `~/.local/share/icons/<iconname>.png` | Copied PNG icon (if found) |
+| `~/.local/share/icons/<iconname>.svg` | Copied SVG icon (if found) |
+
+## Example
+
+```bash
+# From inside the toolbox container:
+toolbox-export export firefox
+# INFO  Exported desktop file: /home/alice/.local/share/applications/firefox.desktop
+# INFO  Exported icon: /home/alice/.local/share/icons/firefox.png
+```
+
+<Note>
+  This command must be run **inside** the Toolbox container where the application is installed. The container filesystem must be accessible for desktop file discovery and icon extraction.
+</Note>
+
+<Warning>
+  Apps whose `.desktop` file contains a `NotShowIn` key are silently skipped. If your application is not exported, confirm its desktop file does not include that field.
+</Warning>

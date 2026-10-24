@@ -1,0 +1,108 @@
+---
+title: "Install toolbox-export on Fedora Atomic and Linux"
+sidebarTitle: "Installation"
+description: "Install toolbox-export using the one-line installer, go install, mise, stew, or goblin. Supports x86_64, arm64, and i386 Linux architectures."
+---
+
+toolbox-export is distributed as a **statically-linked Linux binary** (`CGO_ENABLED=0`) for x86\_64, arm64, and i386. Because it must be invoked from inside a Toolbox container — which mounts the host's home directory — the binary needs to be installed **on the host system**, not inside a container. Place it somewhere on your host `$PATH` (the one-line installer uses `~/.local/bin/`) and it will be accessible from within any Toolbox container automatically.
+
+## Recommended: One-Line Installer
+
+The quickest way to install is the official shell installer:
+
+```bash
+curl -fSsL https://raw.githubusercontent.com/Pratyay360/toolbox-export/refs/heads/main/install.sh | sh
+```
+
+The script:
+1. Verifies you are on Linux (`uname -s`).
+2. Creates `~/.local/bin/` if it does not exist.
+3. Downloads the latest `toolbox-export_Linux_x86_64.tar.gz` from GitHub Releases into a temporary directory.
+4. Extracts the binary and marks it executable.
+5. Prints `Installed to: /home/<you>/.local/bin/toolbox-export`.
+
+The final binary lands at **`~/.local/bin/toolbox-export`**.
+
+<Note>
+  Make sure `~/.local/bin` is on your host `$PATH`. On most Fedora Atomic desktops it is added automatically by `/etc/profile.d/`; if not, add `export PATH="$HOME/.local/bin:$PATH"` to your `~/.bashrc` or `~/.profile`.
+</Note>
+
+## Alternative Installation Methods
+
+<CodeGroup>
+
+```bash mise
+mise github:Pratyay360/toolbox-export@latest
+```
+
+```bash go install
+go install github.com/Pratyay360/toolbox-export@latest
+```
+
+```bash stew
+stew s Pratyay360/toolbox-export
+```
+
+```bash goblin
+curl -sf http://goblin.run/github.com/Pratyay360/toolbox-export | PREFIX=~/.local/bin sh
+```
+
+</CodeGroup>
+
+- **mise** — installs directly from GitHub Releases into mise's shim directory; no Go toolchain required.
+- **go install** — compiles from source; requires Go 1.21 or later on the host.
+- **stew** — a binary manager that pins exact versions; run `stew s Pratyay360/toolbox-export` and stew will resolve the latest release.
+- **goblin** — a zero-dependency Go binary installer; uses `PREFIX` to control the destination.
+
+## Verify Installation
+
+After installing, confirm the binary is reachable:
+
+```bash
+toolbox-export --help
+```
+
+Expected output:
+
+```
+toolbox-export exports applications from a toolbox (or any other
+container) so they can be launched from the host.
+
+Running it without a subcommand exports both the desktop launcher and the
+binary wrapper for the given application. Pass --rm / -r to remove an exported app.
+
+Usage:
+  toolbox-export <application> [flags]
+  toolbox-export [command]
+
+Available Commands:
+  binary      Export only the binary wrapper for an application
+  export      Export only the desktop launcher for an application
+  help        Help about any command
+  init        Initialize the toolbox binary directory and shell PATH
+
+Flags:
+  -h, --help               help for toolbox-export
+  -l, --log-level string   log level (trace, debug, info, warn, error) (default "info")
+  -r, --rm                 remove a previously exported application
+
+Use "toolbox-export [command] --help" for more information about a command.
+```
+
+If the command is not found, ensure the installation directory is on your `$PATH` and open a new shell session.
+
+## Post-Install: Initialize PATH
+
+Before exporting any applications, run the initialization command **on the host** once to create the `~/.local/toolbox/` directory and patch your shell startup files:
+
+<Note>
+  Run `toolbox-export init` after installation to set up the binary wrapper directory and add it to your shell `$PATH`. You only need to do this once. See the [init command reference](/commands/init) for details.
+</Note>
+
+## Supported Architectures
+
+| Platform     | Architecture | Notes                        |
+|--------------|--------------|------------------------------|
+| Linux        | x86\_64      | Default installer target     |
+| Linux        | arm64        | Available on GitHub Releases |
+| Linux        | i386         | Available on GitHub Releases |

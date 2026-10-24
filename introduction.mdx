@@ -1,0 +1,41 @@
+---
+title: "toolbox-export: Distrobox-Style App Exporting for Toolbox"
+sidebarTitle: "Introduction"
+description: "toolbox-export exports apps from Fedora Toolbox containers to the host — desktop launchers, icons, and binary wrappers in one command."
+---
+
+toolbox-export is a Go CLI utility that bridges the gap between Fedora Toolbox and the host desktop. It lets you run `toolbox-export <app>` from inside any Toolbox container and instantly surface that app in your GNOME (or any XDG-compatible) application menu and in your host terminal — without manually editing `.desktop` files, copying icons, or writing shell wrappers yourself.
+
+It is aimed primarily at **Fedora Atomic** (Silverblue, Kinoite, Sericea) and other **ostree-based** Linux users, where the host filesystem is immutable and installing packages directly on the host is undesirable. Toolbox containers are the idiomatic solution for those users, and toolbox-export makes the resulting apps feel native on the host.
+
+## How It Differs from Distrobox
+
+[Distrobox](https://distrobox.it/) ships a built-in `distrobox-export` command that copies desktop entries and creates binary wrappers on the host. **Fedora Toolbox (toolbox / toolbx) has no equivalent**. Users who prefer or are limited to Toolbox — for example because their organisation or workflow is Podman-native — have historically had to do this manually.
+
+toolbox-export fills that gap. It reads `/run/.containerenv` to detect that it is running inside a Toolbox/Toolbx container, resolves the container's own name automatically, and handles all the path-rewriting and icon-copying logic for you. The workflow intentionally mirrors Distrobox's ergonomics so muscle memory transfers across tools.
+
+## What Gets Exported
+
+<CardGroup cols={3}>
+  <Card title="Desktop Launcher" icon="desktop">
+    A patched `.desktop` file is written to `~/.local/share/applications/`. The `Exec=` line is rewritten to invoke `toolbox run -c <container>`, and the app name is suffixed with `(toolbox)` so you can tell it apart from any host version.
+  </Card>
+  <Card title="Binary Wrapper" icon="terminal">
+    A lightweight shell script is placed in `~/.local/toolbox/<app>`. It detects whether it is called from the host, from inside another container, or from a Flatpak sandbox, and dispatches to the correct invocation (`toolbox run`, `podman exec`, or `flatpak-spawn --host`) accordingly.
+  </Card>
+  <Card title="Application Icons" icon="image">
+    PNG and SVG icons referenced by the `.desktop` file are extracted from `/usr/share/icons` and `/usr/share/pixmaps` inside the container and copied to `~/.local/share/icons/` on the host, so the application menu entry renders correctly.
+  </Card>
+</CardGroup>
+
+## Requirements
+
+<Note>
+  - toolbox-export must be **run from inside a Toolbox container**, not on the host. It detects the container environment via `/run/.containerenv`.
+  - **Linux only.** The tool checks `uname -s` at install time and the container runtime at execution time; macOS and Windows are not supported.
+  - The application you want to export must be **installed inside the container**. toolbox-export searches `$PATH` within the container for the binary and scans `/usr/share/applications` for a matching `.desktop` file.
+</Note>
+
+## License
+
+toolbox-export is released under the **Apache License 2.0**. Source code and issue tracker are available at [github.com/Pratyay360/toolbox-export](https://github.com/Pratyay360/toolbox-export).

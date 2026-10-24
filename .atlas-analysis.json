@@ -1,0 +1,68 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "toolbox-export",
+  "projectDescription": "A CLI utility that exports desktop launchers, icons, and binary wrappers from Toolbox containers to the host system, bringing Distrobox-style convenience to Toolbox/Toolbx.",
+  "theme": "aspen",
+  "primaryColor": "#ffae04",
+  "lightColor": "#000000",
+  "darkColor": "#fcfcfc",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Command Reference",
+            "pages": [
+              "commands/overview",
+              "commands/init",
+              "commands/export",
+              "commands/binary",
+              "commands/remove"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/how-it-works",
+              "guides/gui-applications",
+              "guides/cli-applications",
+              "guides/troubleshooting"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Export desktop launchers (.desktop files) from Toolbox containers to the host",
+    "Export binary wrapper scripts for CLI applications inside containers",
+    "Automatic icon extraction and placement from container app directories",
+    "Interactive removal of previously exported application artifacts",
+    "Shell PATH initialization for bash, zsh, fish, and POSIX profile",
+    "Zero-configuration — detects container name automatically from /run/.containerenv",
+    "Supports flatpak-spawn, toolbox run, and podman exec execution backends",
+    "Colored TUI output via lipgloss for clear feedback during operations"
+  ],
+  "publicApiSurface": [
+    "toolbox-export <application>",
+    "toolbox-export init",
+    "toolbox-export export <application>",
+    "toolbox-export binary <application>",
+    "toolbox-export --rm <application>",
+    "--log-level / -l flag (trace, debug, info, warn, error)",
+    "utils.ExportLauncher(app string) error",
+    "utils.ExportBinary(app string) error",
+    "utils.RemoveExported(app string) error",
+    "utils.GetContainerName() (string, bool)",
+    "utils.SetupLogger(w io.Writer, level string)"
+  ]
+}

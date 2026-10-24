@@ -1,0 +1,89 @@
+---
+title: "toolbox-export binary — Export a CLI Binary Wrapper"
+sidebarTitle: "binary"
+description: "The binary subcommand (alias: bexport) creates a shell wrapper script in ~/.local/toolbox so container CLI tools can be called from the host terminal."
+---
+
+The `binary` subcommand creates a thin shell wrapper script that lets you invoke a container-installed CLI tool from any terminal on the host, exactly as if it were a native binary. Once exported, commands like `htop`, `nvim`, or `rustup` become available directly in your host shell — the wrapper transparently dispatches the call back into the correct container, handles Flatpak sandboxes, and even works when called from inside another container.
+
+## Usage
+
+```bash
+toolbox-export binary <application>
+# alias:
+toolbox-export bexport <application>
+```
+
+## Arguments
+
+<ParamField path="application" type="string" required>
+  The name of the binary to export, as it exists inside the container's `$PATH`. For example: `htop`, `nvim`, `rustup`, `cargo`. The binary must be discoverable via the container's `$PATH` and must not already resolve to a wrapper inside `~/.local/toolbox` (to prevent wrapping an existing wrapper).
+</ParamField>
+
+## What It Does
+
+<Steps>
+  <Step title="Verify container context">
+    Reads `/run/.containerenv` to confirm the command is being run inside a container. If the file is absent, the command exits with an error.
+  </Step>
+  <Step title="Read container name">
+    Parses the `name=` field from `/run/.containerenv` to obtain the exact container name. This value is embedded in the wrapper script so calls from the host target the right container.
+  </Step>
+  <Step title="Ensure ~/.local/toolbox exists">
+    Creates `~/.local/toolbox` with permissions `0755` if it does not already exist. If the directory was freshly created, a warning is printed reminding you to run `toolbox-export init` or add the directory to `$PATH` manually.
+  </Step>
+  <Step title="Resolve binary path">
+    Walks each directory in the container's `$PATH` in order, looking for an executable named `<application>`. Any candidate that resolves (including through symlinks) to a path inside `~/.local/toolbox` itself is excluded — this prevents accidentally wrapping an already-exported wrapper.
+  </Step>
+  <Step title="Write wrapper script">
+    Writes the generated shell script to `~/.local/toolbox/<application>` with permissions `0755`. The script embeds the resolved absolute path of the binary and the container name discovered in the previous steps.
+  </Step>
+</Steps>
+
+## Generated Wrapper Script
+
+The script written to `~/.local/toolbox/<application>` contains three execution branches to handle every context from which it may be called:
+
+```sh
+#!/bin/sh
+if [ -f /run/.containerenv ]; then
+  exec flatpak-spawn --host toolbox run -c "<container>" /path/to/binary "$@"
+elif [ -z "$container" ] ; then
+    exec /usr/bin/toolbox run -c <container> /path/to/binary "$@"
+else
+    exec podman exec -d <container> /path/to/binary "$@"
+fi
+```
+
+| Branch | Condition | Mechanism |
+|---|---|---|
+| Flatpak sandbox | `/run/.containerenv` is present | Uses `flatpak-spawn --host` to escape the sandbox before calling `toolbox run` |
+| Bare host | `$container` environment variable is unset | Calls `/usr/bin/toolbox run` directly |
+| Inside another container | `$container` is set but no `.containerenv` file | Uses `podman exec` to reach the target container |
+
+All three branches pass `"$@"` through so arguments and flags reach the real binary unchanged.
+
+## Output File
+
+| Path | Description |
+|---|---|
+| `~/.local/toolbox/<application>` | Executable shell script wrapper (mode `0755`) |
+
+## Example
+
+```bash
+# From inside the toolbox container:
+toolbox-export binary nvim
+# INFO  Exported binary wrapper for 'nvim' to: /home/alice/.local/toolbox/nvim
+
+# Back on the host — works immediately in a new shell:
+nvim README.md
+```
+
+<Note>
+  This command must be run **inside** the Toolbox container where the binary is installed, so that the container's `$PATH` can be searched and the absolute path to the binary can be embedded in the wrapper.
+</Note>
+
+<Tip>
+  If `~/.local/toolbox` is not yet on your host `$PATH`, run [`toolbox-export init`](/commands/init) first. It adds the directory to all major shell configs automatically and only needs to be done once.
+</Tip>

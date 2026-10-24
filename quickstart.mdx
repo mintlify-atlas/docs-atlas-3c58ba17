@@ -1,47 +1,146 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with toolbox-export in Minutes"
+sidebarTitle: "Quickstart"
+description: "Export your first Toolbox container application to the host desktop and terminal in four steps using toolbox-export init and toolbox-export."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+By the end of this guide you will have a Toolbox container application accessible from both the host application menu (e.g. GNOME Shell) and from any host terminal — without manually editing `.desktop` files, copying icons, or writing shell wrappers. The whole process takes under five minutes.
 
 ## Prerequisites
 
-Before you begin, you must have:
+<Note>
+  Before you begin, make sure you have:
 
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
+  - **Fedora Toolbox** (`toolbox` or `toolbx`) installed on the host system.
+  - **toolbox-export** installed on the host. See the [Installation guide](/installation) if you haven't done this yet.
+  - **An application installed inside a Toolbox container.** Common examples: `firefox`, `code` (VS Code), `htop`, `neovim`, `gimp`. The app must exist inside the container — toolbox-export cannot export something that isn't there.
+</Note>
 
-## Get started
+## Step-by-Step Walkthrough
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+
+  <Step title="Initialize toolbox-export (host — run once)">
+    On your **host** system, run the `init` subcommand to create the binary wrapper directory and patch your shell startup files:
 
     ```bash
-    npm install your-package
+    toolbox-export init
     ```
+
+    Example output:
+
+    ```
+    Created directory: /home/alice/.local/toolbox
+    Added toolbox PATH configuration to: /home/alice/.bashrc
+    Added toolbox PATH configuration to: /home/alice/.zshrc
+    Added toolbox PATH configuration to: /home/alice/.profile
+    Added toolbox PATH configuration to: /home/alice/.config/fish/config.fish
+    Open a new shell to apply the PATH changes.
+    ```
+
+    `init` does two things:
+    - Creates `~/.local/toolbox/` — the directory where binary wrappers will be stored.
+    - Appends a `PATH` guard block to `~/.bashrc`, `~/.zshrc`, `~/.profile`, and fish's `config.fish` so that exported wrapper scripts are automatically found in new shell sessions.
+
+    <Tip>
+      You only need to run `toolbox-export init` once per user account. On subsequent runs it will report that the directory and PATH entries already exist and exit cleanly.
+    </Tip>
+
+    Open a new terminal (or run `source ~/.bashrc`) so the updated `PATH` takes effect before you proceed.
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+
+  <Step title="Enter your Toolbox container">
+    Drop into the container where your application is installed:
 
     ```bash
-    your-cli init
+    toolbox enter <container-name>
     ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+
+    For example, if your container is the default Fedora container:
 
     ```bash
-    your-cli start
+    toolbox enter fedora-toolbox-41
     ```
+
+    You will land in a shell prompt that looks identical to your host shell. You can confirm you are inside a container by checking:
+
+    ```bash
+    cat /run/.containerenv
+    ```
+
+    toolbox-export reads this file to identify the container name automatically — you do not need to pass it as an argument.
   </Step>
+
+  <Step title="Export the application">
+    From **inside the container**, run toolbox-export with the application name:
+
+    ```bash
+    toolbox-export firefox
+    ```
+
+    This single command exports **both** the desktop launcher and the binary wrapper simultaneously. Example log output:
+
+    ```
+    INFO  Exported desktop file: /home/alice/.local/share/applications/firefox.desktop
+    INFO  Exported icon: /home/alice/.local/share/icons/firefox.png
+    INFO  Exported binary wrapper for 'firefox' to: /home/alice/.local/toolbox/firefox
+    ```
+
+    toolbox-export:
+    1. Finds `/usr/share/applications/firefox.desktop` inside the container.
+    2. Rewrites the `Exec=` line to `Exec=/usr/bin/toolbox run -c fedora-toolbox-41 /usr/bin/firefox`, appends `(toolbox)` to the `Name=` field, and writes the patched file to `~/.local/share/applications/`.
+    3. Copies matching PNG/SVG icons from `/usr/share/icons` and `/usr/share/pixmaps` inside the container to `~/.local/share/icons/`.
+    4. Writes a shell wrapper script to `~/.local/toolbox/firefox` that dispatches to the right invocation depending on where it is called from (host, another container, or a Flatpak sandbox).
+  </Step>
+
+  <Step title="Verify on the host">
+    Exit the container and confirm everything is wired up on the host:
+
+    ```bash
+    exit   # leave the container
+    ```
+
+    Check that the binary wrapper is on your `PATH`:
+
+    ```bash
+    which firefox
+    # /home/alice/.local/toolbox/firefox
+    ```
+
+    Launch it from the terminal to confirm it runs:
+
+    ```bash
+    firefox
+    ```
+
+    Firefox should open, running inside the Toolbox container but displaying on your host desktop session. You should also see **Firefox (toolbox)** appear in the GNOME application menu (press the Super key and search for "Firefox").
+  </Step>
+
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## What Just Happened
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+toolbox-export created three artefacts on the host filesystem:
+
+| Path | What it is |
+|------|------------|
+| `~/.local/share/applications/firefox.desktop` | Patched XDG desktop entry. `Exec=` invokes `toolbox run`; `Name=` is suffixed with `(toolbox)`. Picked up by GNOME Shell, KDE Plasma, and any XDG-compliant launcher. |
+| `~/.local/share/icons/firefox.png` | Icon file extracted from the container's `/usr/share/icons` or `/usr/share/pixmaps`. Used by the desktop entry and the taskbar. |
+| `~/.local/toolbox/firefox` | Executable shell wrapper script. Detects the calling environment (`/run/.containerenv`, `$container`, or Flatpak) and picks the right transport (`toolbox run`, `podman exec`, or `flatpak-spawn --host`). |
+
+To remove all three artefacts later, run from inside the container:
+
+```bash
+toolbox-export --rm firefox
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Export GUI Applications" icon="window-maximize" href="/guides/gui-applications">
+    Learn how to export desktop apps with complex launcher requirements — multiple `Exec=` entries, D-Bus activation, and Wayland flags.
+  </Card>
+  <Card title="Export CLI Applications" icon="terminal" href="/guides/cli-applications">
+    Export terminal-only tools like `htop`, `neovim`, or custom scripts that have no `.desktop` file, using the `binary` subcommand directly.
+  </Card>
+</CardGroup>

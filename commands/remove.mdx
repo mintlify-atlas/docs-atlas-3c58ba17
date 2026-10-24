@@ -1,0 +1,74 @@
+---
+title: "toolbox-export --rm — Remove Exported Application Artifacts"
+sidebarTitle: "--rm / remove"
+description: "Use toolbox-export --rm <app> to interactively remove desktop files, icons, and binary wrappers previously exported from a Toolbox container."
+---
+
+The `--rm` flag triggers interactive removal of all artifacts that toolbox-export previously created for a given application. Rather than deleting everything silently, it presents a color-coded prompt for each discovered artifact and lets you decide individually whether to remove it, skip it, bulk-remove all remaining ones, or abort entirely. This makes cleanup safe and auditable without requiring you to hunt down files by hand.
+
+## Usage
+
+```bash
+toolbox-export --rm <application>
+# or short form:
+toolbox-export -r <application>
+```
+
+## Arguments
+
+<ParamField path="application" type="string" required>
+  The application name to clean up — for example, `firefox` or `htop`. This is the same name you passed when originally exporting. toolbox-export uses it to locate matching desktop files, icons, and binary wrappers in your home directory.
+</ParamField>
+
+## Interactive Prompt Options
+
+For each artifact found, toolbox-export prints a color-coded prompt showing the artifact type (`[desktop]`, `[icon]`, or `[binary]`) and its full path, then waits for one of the following responses:
+
+<ParamField path="y / yes" type="response">
+  Remove this artifact immediately and move on to the next one.
+</ParamField>
+
+<ParamField path="n / Enter" type="response">
+  Skip this artifact and leave it on disk. Pressing Enter with no input also skips (this is the default).
+</ParamField>
+
+<ParamField path="a / all" type="response">
+  Remove this artifact **and** all remaining artifacts without any further prompting. Useful when you want to wipe everything in one go after reviewing the first few entries.
+</ParamField>
+
+<ParamField path="q / quit" type="response">
+  Abort all remaining removals immediately and exit. Artifacts already removed in this session stay removed; no further files are touched.
+</ParamField>
+
+## Artifacts Found and Offered for Removal
+
+toolbox-export scans three locations to build the list of candidates for the given application name:
+
+| Artifact type | Location | Match criteria |
+|---|---|---|
+| Desktop file | `~/.local/share/applications/*.desktop` | File's `Exec=` line contains `toolbox run` **and** the resolved binary basename matches the app name |
+| Icon | `~/.local/share/icons/` | File's base name (without extension) matches the app name or the icon name declared in a matched desktop file's `Icon=` field |
+| Binary wrapper | `~/.local/toolbox/<app>` | File exists at that path **and** its contents contain the word `toolbox` |
+
+Only flat files are considered for icons — subdirectories (such as installed icon themes) are never touched.
+
+## Example Session
+
+```text
+Found 3 artifact(s) for firefox:
+
+? Remove [desktop] /home/alice/.local/share/applications/firefox.desktop? [y/N/a/q]: y
+INF  Removed desktop: /home/alice/.local/share/applications/firefox.desktop
+? Remove [icon] /home/alice/.local/share/icons/firefox.png? [y/N/a/q]: n
+Skipped /home/alice/.local/share/icons/firefox.png
+? Remove [binary] /home/alice/.local/toolbox/firefox? [y/N/a/q]: y
+INF  Removed binary: /home/alice/.local/toolbox/firefox
+```
+
+<Note>
+  `--rm` can be run from the **host** — it does not require being inside a container. It only reads and removes files in your home directory.
+</Note>
+
+<Warning>
+  Removal is **immediate and permanent** — there is no undo. The interactive per-artifact prompt is the only safeguard. Take care when using the `a` / `all` response.
+</Warning>

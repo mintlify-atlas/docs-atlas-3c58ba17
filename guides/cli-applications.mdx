@@ -1,0 +1,121 @@
+---
+title: "Export CLI Tools from a Toolbox Container to the Host"
+sidebarTitle: "CLI Applications"
+description: "Use toolbox-export binary to expose command-line tools installed in a Toolbox container as callable commands on the host terminal with full argument passthrough."
+---
+
+Command-line tools installed inside a Toolbox container can be made available in the host terminal using `toolbox-export binary`. The exported wrapper transparently passes all arguments and stdin/stdout to the container-side binary, so the tool behaves exactly as it would if called from inside the container — no manual `toolbox run` invocations required.
+
+## When to Use Binary Export
+
+The `binary` subcommand is the right choice when you have installed a CLI tool (such as `nvim`, `htop`, `rustup`, or `gh`) inside a Toolbox container and want to invoke it from the host terminal as if it were a native command. Because these tools have no `.desktop` file, the root `toolbox-export <app>` command may return a "no application found" error. `toolbox-export binary` skips the desktop launcher step entirely and only creates the shell wrapper.
+
+## Walk-through
+
+<Steps>
+  <Step title="Enter the container">
+    Open a shell inside the Toolbox container where the tool is installed:
+
+    ```bash
+    toolbox enter fedora-toolbox-40
+    ```
+
+    Replace `fedora-toolbox-40` with your actual container name.
+  </Step>
+  <Step title="Confirm the binary exists">
+    Verify the tool is reachable inside the container:
+
+    ```bash
+    which htop
+    ```
+
+    This should return the absolute path, e.g. `/usr/bin/htop`. If nothing is
+    returned, install the tool first (e.g. `sudo dnf install htop`).
+  </Step>
+  <Step title="Export the binary wrapper">
+    Run the `binary` subcommand from inside the container:
+
+    ```bash
+    toolbox-export binary htop
+    ```
+
+    toolbox-export resolves the binary path, generates a wrapper script, and
+    writes it to `~/.local/toolbox/htop` with executable permissions (`0755`).
+  </Step>
+  <Step title="Exit the container">
+    Return to the host shell:
+
+    ```bash
+    exit
+    ```
+  </Step>
+  <Step title="Call the tool from the host">
+    Invoke the tool as you normally would on the host:
+
+    ```bash
+    htop
+    ```
+
+    The wrapper intercepts the call, detects the execution environment, and
+    forwards the invocation to the correct container-side binary transparently.
+  </Step>
+</Steps>
+
+## The Generated Wrapper
+
+The wrapper written to `~/.local/toolbox/htop` is a plain POSIX shell script. Here is what it looks like for `htop` exported from a container named `fedora-toolbox-40`:
+
+```sh
+#!/bin/sh
+if [ -f /run/.containerenv ]; then
+  exec flatpak-spawn --host toolbox run -c "fedora-toolbox-40" /usr/bin/htop "$@"
+elif [ -z "$container" ] ; then
+    exec /usr/bin/toolbox run -c fedora-toolbox-40 /usr/bin/htop "$@"
+else
+    exec podman exec -d fedora-toolbox-40 /usr/bin/htop "$@"
+fi
+```
+
+Each branch handles a different calling context:
+
+| Branch | Detected condition | What it does |
+|---|---|---|
+| `/run/.containerenv` exists | Called from inside a Flatpak sandbox | Uses `flatpak-spawn --host` to break out of the Flatpak and invoke `toolbox run` on the real host |
+| `$container` is unset | Called from the bare host | Uses `/usr/bin/toolbox run -c <container>` directly |
+| Neither condition matches | Called from inside a different container | Uses `podman exec -d <container>` to exec into the target container |
+
+The `"$@"` at the end of every branch ensures all positional arguments are forwarded verbatim. Standard input and output are inherited from the calling shell.
+
+## PATH Note
+
+<Note>
+  The wrapper is placed in `~/.local/toolbox/`. If this directory is not in
+  your `$PATH`, the host shell will not find the wrapper. Run
+  `toolbox-export init` on the host first, then open a new shell session:
+
+  ```bash
+  toolbox-export init
+  ```
+
+  `init` appends the necessary `PATH` snippet to `~/.bashrc`, `~/.zshrc`,
+  `~/.profile`, and `~/.config/fish/config.fish`.
+</Note>
+
+## Exporting Binary-Only vs Full Export
+
+Choosing between the three invocation forms depends on whether the application has a graphical launcher:
+
+| Command | Desktop launcher | Icons | Binary wrapper |
+|---|---|---|---|
+| `toolbox-export <app>` | ✓ | ✓ | ✓ |
+| `toolbox-export export <app>` | ✓ | ✓ | ✗ |
+| `toolbox-export binary <app>` | ✗ | ✗ | ✓ |
+
+<Tip>
+  CLI-only tools that have no `.desktop` file should always use
+  `toolbox-export binary` rather than the root command. The root command calls
+  `ExportLauncher` first, which will return a "no application found" error if
+  no matching `.desktop` file exists — even if the binary export would have
+  succeeded. Using the `binary` subcommand directly skips the launcher step
+  entirely.
+</Tip>

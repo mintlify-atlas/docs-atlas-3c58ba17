@@ -1,0 +1,171 @@
+---
+title: "How toolbox-export Works: Container Detection and Export Pipeline"
+sidebarTitle: "How It Works"
+description: "Learn how toolbox-export detects Toolbox containers, patches .desktop files, generates binary wrappers, and copies icons to integrate apps with the host."
+---
+
+toolbox-export follows a well-defined pipeline when exporting an application. Understanding the internals helps when debugging unexpected behavior or adapting the tool to non-standard container setups. Each stage of the pipeline is responsible for a discrete piece of the integration: detecting the running container, locating the application's metadata, rewriting it for host execution, and placing the resulting files where the host desktop environment and shell can find them.
+
+## Container Detection
+
+Before any export can take place, toolbox-export must verify it is running inside a Toolbox container. It does this by checking for the presence of `/run/.containerenv` — the path stored in the `containerenvPath` constant in `utils/common.go`. If the file does not exist, the tool returns an error immediately and exits.
+
+Once the file is confirmed to exist, the container name is resolved by reading the `name=` field from that file using `GetContainerName()`. The value is stripped of surrounding quotes and whitespace before use.
+
+A typical `/run/.containerenv` file looks like this:
+
+```ini
+engine="podman"
+name="fedora-toolbox-40"
+id="a3f2c1..."
+image="registry.fedoraproject.org/fedora-toolbox:40"
+```
+
+<Note>
+  Only the `name=` field is used by toolbox-export. If your container runtime
+  does not set this field, container name resolution will fail. See the
+  [Troubleshooting](/guides/troubleshooting) guide for details.
+</Note>
+
+## The Export Pipeline
+
+<Steps>
+  <Step title="Container check">
+    toolbox-export calls `checkContainer()`, which stats `/run/.containerenv`.
+    If the file is absent, an error is returned: `"not running inside a toolbox
+    container"`. This is the very first guard — no further work is done on the
+    host.
+  </Step>
+  <Step title="Read container name">
+    `GetContainerName()` opens `/run/.containerenv` and scans its lines for one
+    beginning with `name=`. The quoted value is extracted, trimmed, and returned
+    as the container identifier used in all patched commands.
+  </Step>
+  <Step title="Scan .desktop files">
+    `getDesktopFiles()` globs two standard XDG locations inside the container:
+
+    ```
+    /usr/share/applications/*.desktop
+    /usr/local/share/applications/*.desktop
+    ```
+
+    Any file whose content contains the string `NotShowIn` is filtered out at
+    this stage. `NotShowIn` entries are typically background daemons or
+    session-specific services that should not appear in user-facing launchers.
+  </Step>
+  <Step title="Match app">
+    Each remaining `.desktop` file is inspected line by line. A file is
+    considered a match when its `Exec=` line both contains the app name string
+    and, after tokenising the command, the `base` of one of the tokens equals
+    the app name exactly. This prevents a search for `fire` from accidentally
+    matching `firefox`.
+  </Step>
+  <Step title="Patch the desktop file">
+    For every matched file, three line-level rewrites are applied:
+
+    - **`Exec=`** — `toolbox run -c <container>` is prepended to the existing
+      command, so the full line becomes
+      `Exec=/usr/bin/toolbox run -c <container> <original-exec>`.
+    - **`Name=`** — ` (toolbox)` is appended to the display name so users can
+      distinguish container-hosted apps from native ones in the launcher.
+    - **`TryExec=`** — rewritten to just the basename of the original path,
+      because the full container path is inaccessible from the host.
+  </Step>
+  <Step title="Write launcher">
+    The patched content is written to
+    `~/.local/share/applications/<original-filename>.desktop` with permissions
+    `0644`. An info-level log line is emitted for each file written.
+  </Step>
+  <Step title="Copy icons">
+    The `Icon=` field value is collected from each matched `.desktop` file.
+    `findIconFiles()` walks two trees inside the container:
+
+    ```
+    /usr/share/icons/
+    /usr/share/pixmaps/
+    ```
+
+    Any file whose name starts with `<icon-name>.` and ends with `.png` or
+    `.svg` is copied verbatim to `~/.local/share/icons/` on the host.
+  </Step>
+  <Step title="Binary wrapper">
+    `ExportBinary()` locates the binary by iterating the container's `$PATH`
+    entries, skipping any candidate whose resolved path falls inside
+    `~/.local/toolbox` (to avoid wrapping a previously exported wrapper). The
+    first matching executable is used as `containerBinPath`. A shell script
+    wrapper is then written to `~/.local/toolbox/<name>` with permissions
+    `0755`.
+  </Step>
+</Steps>
+
+## Binary Wrapper Execution Logic
+
+The generated wrapper script contains a three-way conditional that adapts to whichever environment it is called from:
+
+```sh
+#!/bin/sh
+if [ -f /run/.containerenv ]; then
+  exec flatpak-spawn --host toolbox run -c "fedora-toolbox-40" /usr/bin/firefox "$@"
+elif [ -z "$container" ] ; then
+    exec /usr/bin/toolbox run -c fedora-toolbox-40 /usr/bin/firefox "$@"
+else
+    exec podman exec -d fedora-toolbox-40 /usr/bin/firefox "$@"
+fi
+```
+
+| Condition | Meaning | Command used |
+|---|---|---|
+| `/run/.containerenv` exists | Running inside a Flatpak sandbox | `flatpak-spawn --host toolbox run` |
+| `$container` is empty | Running on the bare host | `/usr/bin/toolbox run -c <container>` |
+| Neither of the above | Running inside a different container | `podman exec -d <container>` |
+
+The `"$@"` at the end of every branch passes all arguments and standard I/O through to the container-side process transparently.
+
+## PATH Management
+
+Binary wrappers are placed in `~/.local/toolbox/`, which is not in the default `$PATH` on a fresh Fedora installation. The `toolbox-export init` command handles this one-time setup step. Run it on the **host** (not inside a container):
+
+```bash
+toolbox-export init
+```
+
+`init` performs two actions:
+
+1. **Creates `~/.local/toolbox/`** if it does not already exist.
+2. **Appends a PATH snippet** to `~/.bashrc`, `~/.zshrc`, `~/.profile`, and `~/.config/fish/config.fish` (using the POSIX `case` guard for POSIX shells and a `contains` check for Fish). The snippet is only appended if it is not already present, making `init` safe to run multiple times.
+
+```bash
+# Snippet added to .bashrc / .zshrc / .profile
+case ":$PATH:" in
+    *":$HOME/.local/toolbox:"*) ;;
+    *) export PATH="$PATH:$HOME/.local/toolbox" ;;
+esac
+```
+
+After running `init`, open a new shell session (or `source ~/.bashrc`) for the PATH change to take effect.
+
+<Warning>
+  Binary wrappers will not be callable from the host terminal until
+  `~/.local/toolbox` is in `$PATH`. Always run `toolbox-export init` before
+  exporting your first binary.
+</Warning>
+
+## Logging
+
+toolbox-export uses the `--log-level` global flag (short form `-l`) to control output verbosity. The flag is available on all commands and subcommands. The default level is `info`.
+
+```bash
+toolbox-export --log-level debug firefox
+```
+
+The five supported levels, from most to least verbose, are:
+
+| Level | When to use |
+|---|---|
+| `trace` | Deep internal diagnostics |
+| `debug` | Per-file decisions and path resolution |
+| `info` | Normal operation progress (default) |
+| `warn` | Non-fatal issues, e.g. directory already exists |
+| `error` | Fatal failures before exit |
+
+Log output is written to **stderr** and includes an RFC 3339 timestamp on each line. Color is automatically disabled when stderr is not a terminal (e.g. when piping to a file or CI runner).

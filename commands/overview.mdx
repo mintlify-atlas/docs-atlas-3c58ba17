@@ -1,0 +1,47 @@
+---
+title: "toolbox-export Command Reference Overview"
+sidebarTitle: "Overview"
+description: "Complete command reference for toolbox-export. Covers the root export command, init, export, binary subcommands, and the --rm removal flag with all options."
+---
+
+toolbox-export is a Go CLI tool built on [Cobra](https://github.com/spf13/cobra) that bridges Fedora Toolbox containers and the host desktop environment. Running `toolbox-export <app>` without any subcommand performs a full export — it copies the application's `.desktop` launcher (with icons) to the host and creates a binary wrapper script so the tool is reachable from any terminal. Three focused subcommands (`init`, `export`, `binary`) let you perform each piece of that workflow independently, and the `--rm` flag triggers interactive removal of everything previously exported for a given app.
+
+## Command Summary
+
+| Command | Description | Must run inside container? |
+|---|---|---|
+| `toolbox-export <app>` | Export desktop launcher + binary wrapper | Yes |
+| `toolbox-export init` | Initialize PATH and create `~/.local/toolbox` | No |
+| `toolbox-export export <app>` | Export only the desktop launcher and icons | Yes |
+| `toolbox-export binary <app>` (alias: `bexport`) | Export only the binary wrapper script | Yes |
+| `toolbox-export --rm <app>` | Interactively remove exported artifacts | No |
+
+## Global Flags
+
+Global flags are accepted by every command and subcommand. They are defined on the root command's persistent flag set and inherited automatically.
+
+<ParamField path="--log-level" type="string" default="info">
+  Set the verbosity of log output. Accepted values are `trace`, `debug`, `info`, `warn`, and `error`. Short form: `-l`.
+
+  ```bash
+  toolbox-export --log-level debug firefox
+  toolbox-export -l trace binary htop
+  ```
+</ParamField>
+
+## Command Pages
+
+<CardGroup cols={2}>
+  <Card title="init" icon="play" href="/commands/init">
+    Create `~/.local/toolbox` and patch shell configs to add it to `$PATH`.
+  </Card>
+  <Card title="export" icon="arrow-up-from-bracket" href="/commands/export">
+    Export a `.desktop` launcher and icons from a container app to the host.
+  </Card>
+  <Card title="binary" icon="terminal" href="/commands/binary">
+    Create a wrapper script so container CLI tools work from any host terminal.
+  </Card>
+  <Card title="--rm / remove" icon="trash" href="/commands/remove">
+    Interactively remove desktop files, icons, and binary wrappers.
+  </Card>
+</CardGroup>

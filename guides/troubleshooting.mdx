@@ -1,0 +1,225 @@
+---
+title: "Troubleshooting toolbox-export: Common Errors and Fixes"
+sidebarTitle: "Troubleshooting"
+description: "Fix common toolbox-export errors including container detection failures, missing desktop files, binary not found, and PATH issues with step-by-step solutions."
+---
+
+Most toolbox-export failures fall into a few categories: running the tool in the wrong environment, missing application `.desktop` files, or PATH not being configured. This guide covers the most common errors and how to resolve them. If you need more detail about what toolbox-export is doing at any step, refer to the [How It Works](/guides/how-it-works) guide, and increase log verbosity using the `--log-level` flag described at the bottom of this page.
+
+<Accordion title='Error: "not running inside a toolbox container"'>
+  **Cause:** toolbox-export was invoked on the host shell instead of from inside
+  a Toolbox container. The tool checks for `/run/.containerenv` to confirm it
+  is running inside a container — this file only exists inside Toolbox (and
+  compatible OCI containers). Running it on the host means that file is absent
+  and the check fails immediately.
+
+  **Fix:** Enter the container first, then run toolbox-export from within it:
+
+  ```bash
+  toolbox enter fedora-toolbox-40
+  toolbox-export firefox
+  ```
+
+  <Note>
+    `toolbox-export init` and `toolbox-export --rm` are intentional exceptions
+    to this rule. `init` sets up the host PATH configuration and must be run
+    on the host. `--rm` removes previously exported artifacts from the host
+    filesystem and also runs on the host.
+  </Note>
+</Accordion>
+
+<Accordion title='Error: "could not find container name in /run/.containerenv"'>
+  **Cause:** The container runtime did not write a `name=` field into
+  `/run/.containerenv`. This can happen with non-standard OCI runtimes or when
+  using a container engine other than Podman-backed Toolbox. toolbox-export
+  requires the `name=` field to construct the `toolbox run -c <name>` command.
+
+  **Fix:** Inspect the file directly inside the container:
+
+  ```bash
+  cat /run/.containerenv
+  ```
+
+  A correctly configured file should contain a line like:
+
+  ```ini
+  name="fedora-toolbox-40"
+  ```
+
+  If the `name=` line is absent, your container runtime does not populate this
+  field and toolbox-export cannot automatically resolve the container name.
+  Consider filing an issue with your container runtime, or manually setting up
+  the export using a custom wrapper.
+</Accordion>
+
+<Accordion title='Error: "no application found"'>
+  **Cause:** toolbox-export scanned `/usr/share/applications/*.desktop` and
+  `/usr/local/share/applications/*.desktop` inside the container but could not
+  find a `.desktop` file whose `Exec=` line references the application name you
+  passed.
+
+  **Fix:**
+
+  1. Check whether the app has a `.desktop` file at all:
+
+     ```bash
+     ls /usr/share/applications/ | grep -i firefox
+     ```
+
+  2. If no file appears, the app is CLI-only and has no desktop launcher. Use
+     `toolbox-export binary` instead:
+
+     ```bash
+     toolbox-export binary firefox
+     ```
+
+  3. If a `.desktop` file exists but wasn't matched, open it and inspect the
+     `Exec=` line:
+
+     ```bash
+     grep "^Exec=" /usr/share/applications/firefox.desktop
+     ```
+
+     The basename of the command on the `Exec=` line must match the argument
+     you pass to toolbox-export exactly. For example, if the line reads
+     `Exec=/usr/bin/firefox-esr %u`, you must run
+     `toolbox-export firefox-esr`, not `toolbox-export firefox`.
+
+  4. Also check whether the file contains `NotShowIn` — such entries are
+     filtered out unconditionally:
+
+     ```bash
+     grep "NotShowIn" /usr/share/applications/firefox.desktop
+     ```
+</Accordion>
+
+<Accordion title='Error: "command not found" when calling an exported binary on the host'>
+  **Cause:** `~/.local/toolbox` is not present in the host `$PATH`. Wrapper
+  scripts are placed in that directory, but the host shell cannot locate them
+  without an explicit PATH entry.
+
+  **Fix:** Run `toolbox-export init` on the host (outside any container):
+
+  ```bash
+  toolbox-export init
+  ```
+
+  Then open a new shell session, or source your shell's rc file:
+
+  ```bash
+  source ~/.bashrc   # bash
+  source ~/.zshrc    # zsh
+  ```
+
+  Verify the directory is now in your PATH:
+
+  ```bash
+  echo $PATH | tr ':' '\n' | grep toolbox
+  ```
+
+  You should see a line containing `~/.local/toolbox` or its expanded form.
+</Accordion>
+
+<Accordion title="App doesn't appear in the application menu (GNOME/KDE)">
+  **Cause:** The desktop environment caches the application database and does
+  not pick up new `.desktop` files instantly. The launcher was written correctly
+  to `~/.local/share/applications/`, but the cache has not been refreshed yet.
+
+  **Fix:** Manually trigger a database refresh from the host terminal:
+
+  ```bash
+  update-desktop-database ~/.local/share/applications
+  ```
+
+  If the app still doesn't appear, log out and log back in. Most desktop
+  environments (GNOME Shell, KDE Plasma) perform a full rescan of all XDG
+  application directories on session start.
+</Accordion>
+
+<Accordion title="App was exported but its icon is missing">
+  **Cause:** toolbox-export searches for icons in `/usr/share/icons/` and
+  `/usr/share/pixmaps/` inside the container, matching files whose names start
+  with `<icon-name>.`. If the application ships its icon in a non-standard
+  location, or if the `Icon=` field in the `.desktop` file uses an absolute
+  path that doesn't resolve to a file in those two trees, no icon will be
+  copied.
+
+  **Fix:** Locate the icon manually inside the container and copy it yourself:
+
+  ```bash
+  # Find the icon inside the container
+  find /usr/share/icons /usr/share/pixmaps -name "firefox*" 2>/dev/null
+
+  # Copy it to the host icon directory (run from inside the container)
+  cp /usr/share/icons/hicolor/128x128/apps/firefox.png \
+     ~/.local/share/icons/
+  ```
+
+  Alternatively, copy it from the host after exiting the container using
+  `toolbox run`:
+
+  ```bash
+  toolbox run -c fedora-toolbox-40 \
+    cp /usr/share/icons/hicolor/128x128/apps/firefox.png \
+       ~/.local/share/icons/
+  ```
+</Accordion>
+
+<Accordion title="Increasing log verbosity for debugging">
+  When an export fails silently or produces unexpected results, enable detailed
+  logging with the `--log-level` flag. This flag is global and works with all
+  commands and subcommands:
+
+  ```bash
+  toolbox-export --log-level debug firefox
+  ```
+
+  For the most granular output, use `trace`:
+
+  ```bash
+  toolbox-export --log-level trace firefox
+  ```
+
+  The five available levels, from most to least verbose:
+
+  | Level | Description |
+  |---|---|
+  | `trace` | Fine-grained internal diagnostics |
+  | `debug` | Per-file decisions, path lookups, and matching results |
+  | `info` | Normal progress messages (default) |
+  | `warn` | Non-fatal issues, such as directories that already exist |
+  | `error` | Fatal failures reported before exit |
+
+  Log output goes to **stderr** with RFC 3339 timestamps. You can redirect it
+  to a file for closer inspection:
+
+  ```bash
+  toolbox-export --log-level trace firefox 2>export-debug.log
+  cat export-debug.log
+  ```
+</Accordion>
+
+<Accordion title='"No exported artifacts found" when using --rm'>
+  **Cause:** The application name passed to `--rm` does not match the name used
+  when the app was originally exported. toolbox-export searches
+  `~/.local/share/applications/`, `~/.local/share/icons/`, and
+  `~/.local/toolbox/` for artifacts whose filenames or `Exec=` lines match the
+  provided name. A mismatch — for example, exporting as `firefox-esr` but
+  removing as `firefox` — results in zero artifacts being found.
+
+  **Fix:** Check the three artifact directories directly on the host to find the
+  exact name under which the app was exported:
+
+  ```bash
+  ls ~/.local/share/applications/ | grep -i firefox
+  ls ~/.local/share/icons/        | grep -i firefox
+  ls ~/.local/toolbox/            | grep -i firefox
+  ```
+
+  Once you identify the correct name (e.g. `firefox-esr`), pass that exact
+  string to `--rm`:
+
+  ```bash
+  toolbox-export --rm firefox-esr
+  ```
+</Accordion>

@@ -1,0 +1,125 @@
+---
+title: "Export GUI Applications from a Toolbox Container"
+sidebarTitle: "GUI Applications"
+description: "Step-by-step guide to exporting graphical desktop applications from Toolbox containers so they appear in GNOME or KDE application menus on the host."
+---
+
+Graphical applications installed inside a Toolbox container can be fully integrated with the host desktop environment using toolbox-export. The tool patches the app's `.desktop` entry and copies its icons so GNOME, KDE, or any XDG-compliant launcher can find and launch it. No manual editing of desktop files or icon directories is required — toolbox-export handles discovery, patching, and placement automatically.
+
+## Prerequisites
+
+<Note>
+  Before following this guide, make sure you have:
+
+  - **toolbox-export installed on the host.** See the installation instructions
+    in the README or your distribution's package manager.
+  - **`toolbox-export init` already run on the host.** This creates
+    `~/.local/toolbox/` and adds it to `$PATH`. See the
+    [init command reference](/commands/init) for details.
+  - **The application installed inside the container.** The examples below use
+    `firefox`, but the same steps apply to any GUI app with a `.desktop` file.
+</Note>
+
+## Walk-through
+
+<Steps>
+  <Step title="Enter the container">
+    Open a shell inside the Toolbox container where the application is
+    installed:
+
+    ```bash
+    toolbox enter fedora-toolbox-40
+    ```
+
+    Replace `fedora-toolbox-40` with your actual container name. You can list
+    available containers with `toolbox list`.
+  </Step>
+  <Step title="Confirm the app is installed">
+    Verify that the application binary is reachable inside the container:
+
+    ```bash
+    which firefox
+    ```
+
+    You should see a path such as `/usr/bin/firefox`. If `which` returns
+    nothing, install the application first (e.g. `sudo dnf install firefox`).
+  </Step>
+  <Step title="Export the app (launcher and binary)">
+    Run the root `toolbox-export` command with the application name. This
+    exports both the desktop launcher **and** the binary wrapper in a single
+    step:
+
+    ```bash
+    toolbox-export firefox
+    ```
+
+    toolbox-export will locate the matching `.desktop` file, patch it, copy
+    icons, and write the binary wrapper — all automatically.
+  </Step>
+  <Step title="Export the launcher only (optional)">
+    If you want the desktop launcher and icons but not the binary wrapper, use
+    the `export` subcommand:
+
+    ```bash
+    toolbox-export export firefox
+    ```
+
+    This skips the binary wrapper step entirely.
+  </Step>
+  <Step title="Refresh the application database">
+    Exit the container and, back on the host, run the following command to
+    register the new launcher with the desktop environment immediately:
+
+    ```bash
+    update-desktop-database ~/.local/share/applications
+    ```
+
+    Alternatively, log out and log back in — most desktop environments rescan
+    `~/.local/share/applications` on login automatically.
+  </Step>
+</Steps>
+
+## What Was Created
+
+After a successful export, three artifacts appear on the host:
+
+| Path | Type | Description |
+|---|---|---|
+| `~/.local/share/applications/firefox.desktop` | Patched launcher | The `.desktop` file with `Exec=` rewritten to invoke the container |
+| `~/.local/share/icons/firefox.png` | Copied icon | The application icon, copied from the container's icon directories |
+| `~/.local/toolbox/firefox` | Binary wrapper | Shell script that forwards invocations to the container (only when using the root command) |
+
+## Inspecting the Patched .desktop File
+
+toolbox-export makes targeted rewrites to the original `.desktop` file. The most important changes affect the `Exec=` and `Name=` lines:
+
+```ini
+# Before (original .desktop file inside the container):
+Name=Firefox Web Browser
+Exec=firefox %u
+
+# After (patched file written to host ~/.local/share/applications/):
+Name=Firefox Web Browser (toolbox)
+Exec=/usr/bin/toolbox run -c fedora-toolbox-40 firefox %u
+```
+
+The `(toolbox)` suffix makes the app visually distinguishable from any natively installed version in the application menu. The `Exec=` line is rewritten in-place — all existing arguments (like `%u`) are preserved unchanged.
+
+<Tip>
+  If the app doesn't appear in the application menu immediately after export,
+  run:
+
+  ```bash
+  update-desktop-database ~/.local/share/applications
+  ```
+
+  Or log out and back in to trigger a full rescan of the XDG applications
+  directory.
+</Tip>
+
+<Note>
+  Applications whose `.desktop` file contains a `NotShowIn` directive are
+  silently skipped by toolbox-export. These entries belong to background
+  services, session daemons, or environment-specific launchers that are not
+  intended to appear in user-facing application menus.
+</Note>

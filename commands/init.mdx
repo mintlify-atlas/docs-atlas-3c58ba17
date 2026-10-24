@@ -1,0 +1,86 @@
+---
+title: "toolbox-export init — Initialize Shell PATH"
+sidebarTitle: "init"
+description: "toolbox-export init creates ~/.local/toolbox and appends the PATH export snippet to .bashrc, .zshrc, .profile, and fish config.fish automatically."
+---
+
+`init` is the one-time setup command that prepares your host environment for toolbox-export. It creates the `~/.local/toolbox` directory where all binary wrapper scripts are placed and patches every major shell configuration file to add that directory to `$PATH`. Once `init` has run, any binary wrapper you later export will be immediately available in new terminal sessions without any manual shell configuration.
+
+## Usage
+
+```bash
+toolbox-export init
+```
+
+## What It Does
+
+<Steps>
+  <Step title="Create ~/.local/toolbox">
+    Creates the directory `~/.local/toolbox` with permissions `0755`. This is where all binary wrapper scripts produced by `toolbox-export binary` are stored. If the directory already exists, this step is skipped with a notice.
+  </Step>
+  <Step title="Patch ~/.bashrc">
+    Appends the POSIX-compatible PATH snippet to `~/.bashrc`. The snippet uses a `case` guard so the directory is only added to `$PATH` once, even if your `.bashrc` is sourced multiple times.
+  </Step>
+  <Step title="Patch ~/.zshrc">
+    Appends the same PATH snippet to `~/.zshrc` for Zsh users. The file is created if it does not yet exist.
+  </Step>
+  <Step title="Patch ~/.profile">
+    Appends the snippet to `~/.profile` so login shells (including display-manager sessions) also pick up the directory.
+  </Step>
+  <Step title="Patch ~/.config/fish/config.fish">
+    Appends a fish-compatible `set -gx PATH` block to `~/.config/fish/config.fish`. The parent directory `~/.config/fish/` is created automatically if needed.
+  </Step>
+</Steps>
+
+Every step is **idempotent** — before writing, `init` checks whether the snippet is already present in the target file and skips it if so.
+
+## Shell Snippets Appended
+
+The exact content written to each shell configuration file is shown below.
+
+<CodeGroup>
+  ```bash bash / zsh / profile
+  # toolbox-export: add exported binaries to PATH
+  case ":$PATH:" in
+      *":$HOME/.local/toolbox:"*) ;;
+      *) export PATH="$PATH:$HOME/.local/toolbox" ;;
+  esac
+  ```
+
+  ```fish fish (config.fish)
+  # toolbox-export: add exported binaries to PATH
+  if not contains $HOME/.local/toolbox $PATH
+      set -gx PATH $PATH $HOME/.local/toolbox
+  end
+  ```
+</CodeGroup>
+
+## Expected Output
+
+<CodeGroup>
+  ```text First run (fresh environment)
+  Created directory: /home/alice/.local/toolbox
+  Added toolbox PATH configuration to: /home/alice/.bashrc
+  Added toolbox PATH configuration to: /home/alice/.zshrc
+  Added toolbox PATH configuration to: /home/alice/.profile
+  Added toolbox PATH configuration to: /home/alice/.config/fish/config.fish
+  Open a new shell to apply the PATH changes.
+  ```
+
+  ```text Already initialized
+  Directory already exists: /home/alice/.local/toolbox
+  Toolbox PATH configuration already exists in: /home/alice/.bashrc
+  Toolbox PATH configuration already exists in: /home/alice/.zshrc
+  Toolbox PATH configuration already exists in: /home/alice/.profile
+  Toolbox PATH configuration already exists in: /home/alice/.config/fish/config.fish
+  Open a new shell to apply the PATH changes.
+  ```
+</CodeGroup>
+
+<Note>
+  `init` does **not** need to be run inside a container. Run it on the host before entering any Toolbox container and exporting binaries.
+</Note>
+
+<Tip>
+  You only need to run `init` once, even if you later export binaries from multiple different containers. All wrappers land in the same `~/.local/toolbox` directory.
+</Tip>
